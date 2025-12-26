@@ -1,0 +1,6 @@
+torch
+transformers
+datasets
+sacremoses
+tqdm
+git+https://github.com/VarunGumma/IndicTransToolkit.git
