@@ -1,0 +1,7 @@
+{
+    "tables": {
+        "users": ["id", "name", "email", "created_at"],
+        "orders": ["id", "user_id", "total", "status"],
+        "products": ["id", "name", "price", "stock"]
+    }
+}
