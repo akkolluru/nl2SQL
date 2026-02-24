@@ -82,11 +82,13 @@ def translate_batch(
 def main():
     parser = argparse.ArgumentParser(description="Translate Spider dataset to Hindi and Telugu.")
     parser.add_argument("--split", type=str, default="train", help="Dataset split to process (e.g., train, validation).")
+    parser.add_argument("--output-dir", type=str, default="data/processed", help="Directory to save output files.")
     args = parser.parse_args()
 
     split_name = args.split
-    output_dir = "data/processed"
+    output_dir = args.output_dir
     output_file = os.path.join(output_dir, f"indic_spider_{split_name}.jsonl")
+    checkpoint_file = os.path.join(output_dir, f".checkpoint_{split_name}")
 
     # Ensure output directory exists
     os.makedirs(output_dir, exist_ok=True)
@@ -100,15 +102,22 @@ def main():
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     logger.info(f"Using device: {device}")
+    
+    # Explicit detection and logging of AMD ROCm vs NVIDIA CUDA
+    if torch.cuda.is_available():
+        gpu_name = torch.cuda.get_device_name(0)
+        logger.info(f"GPU detected: {gpu_name}")
+        if "Radeon" in gpu_name or "AMD" in gpu_name:
+            logger.info("AMD GPU (ROCm) environment detected.")
 
     logger.info(f"Loading model: {MODEL_NAME}...")
     try:
         tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, trust_remote_code=True)
+        # Use float16 on GPU to halve memory consumption for the 1B model
         model = AutoModelForSeq2SeqLM.from_pretrained(
             MODEL_NAME,
             trust_remote_code=True,
-            # torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32
-            # Commented out dtype optimization to be safe, but float16 is standard for 1B models on GPU.
+            torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32
         ).to(device)
         ip = IndicProcessor(inference=True)
     except Exception as e:
@@ -119,15 +128,22 @@ def main():
 
     buffer = []
 
-    # Open file handle
-    try:
-        with open(output_file, "w", encoding="utf-8") as f_out:
-            # Iterate in batches
-            # The dataset object is indexable, but for batching it's easier to iterate
-            # We can use a custom batcher or just slice.
+    # Checkpoint logic
+    start_batch = 0
+    if os.path.exists(checkpoint_file):
+        try:
+            with open(checkpoint_file, "r") as cf:
+                start_batch = int(cf.read().strip())
+                logger.info(f"Resuming from batch: {start_batch}")
+        except Exception:
+            pass
 
+    # Open file handle (append if resuming, else write)
+    mode = "a" if start_batch > 0 else "w"
+    try:
+        with open(output_file, mode, encoding="utf-8") as f_out:
             total_size = len(dataset)
-            for i in tqdm(range(0, total_size, BATCH_SIZE), desc="Translating"):
+            for i in tqdm(range(start_batch, total_size, BATCH_SIZE), desc="Translating"):
                 batch_indices = range(i, min(i + BATCH_SIZE, total_size))
                 batch_items = dataset.select(batch_indices)
 
@@ -162,6 +178,10 @@ def main():
                     }
 
                     f_out.write(json.dumps(output_record, ensure_ascii=False) + "\n")
+                
+                # Write checkpoint after successful batch
+                with open(checkpoint_file, "w") as cf:
+                    cf.write(str(i + BATCH_SIZE))
 
     except Exception as e:
         logger.error(f"An error occurred during processing: {e}")
