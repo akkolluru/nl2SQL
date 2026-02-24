@@ -1,0 +1,27 @@
+# AMD GPU (ROCm) requirements — Linux machine only
+# -------------------------------------------------------
+# Step 1: Install PyTorch with ROCm support FIRST:
+#   pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/rocm6.2
+#   (Check https://pytorch.org/get-started/locally/ for your ROCm version)
+#
+# Step 2: Then install these:
+#   pip install -r requirements_amd.txt
+# -------------------------------------------------------
+
+# Translation model
+transformers>=4.40.0
+sentencepiece>=0.2.0
+
+# Dataset loading (Spider via HuggingFace)
+datasets>=2.18.0
+
+# Progress bar
+tqdm>=4.66.0
+
+# IndicTrans2 toolkit (AI4Bharat)
+# Install from source:
+#   pip install git+https://github.com/AI4Bharat/IndicTrans2.git#subdirectory=huggingface_interface/IndicTransToolkit
+IndicTransToolkit @ git+https://github.com/AI4Bharat/IndicTrans2.git#subdirectory=huggingface_interface/IndicTransToolkit
+
+# Accelerate for efficient model loading
+accelerate>=0.30.0

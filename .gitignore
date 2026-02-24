@@ -1,0 +1,49 @@
+# Agent tools
+.agent/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+.env
+.env.*
+*.egg-info/
+dist/
+build/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Large data files (Spider dataset, etc.)
+spider_data/
+data/*.db
+data/*.sqlite
+data/*.json
+
+# Generated translation output & benchmark results
+data/processed/
+data/benchmark_results/
+
+# IndicTrans2 checkpoints
+*.checkpoint
+
+# Logs
+*.log
+
+# OS
+Thumbs.db
