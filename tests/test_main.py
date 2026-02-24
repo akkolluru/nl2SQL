@@ -58,6 +58,6 @@ def test_query_flow(client):
         
         assert response.status_code == 200
         data = response.json()
-        assert data["sql"] == "SELECT name FROM users;"
+        assert data["sql"] == "SELECT name FROM users LIMIT 100;"
         # JSON adapter returns empty rows
         assert data["rows"] == []
