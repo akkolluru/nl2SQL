@@ -15,9 +15,12 @@ class Settings(BaseModel):
     # Query safety
     default_limit: int = int(os.getenv("DEFAULT_LIMIT", "100"))
 
-    # LLM (Ollama runtime)
+    # LLM (Ollama runtime) — default to phi3:mini (low memory)
     ollama_url: str = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434")
-    ollama_model: str = os.getenv("OLLAMA_MODEL", "mistral")
+    ollama_model: str = os.getenv("OLLAMA_MODEL", "phi3:mini")
+
+    # Supported languages
+    supported_languages: list[str] = ["en", "hi", "te"]
 
 # Create a global settings object
 settings = Settings()

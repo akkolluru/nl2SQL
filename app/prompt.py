@@ -1,19 +1,58 @@
 # app/prompt.py
 
-SYSTEM_INSTR = (
-    "You convert English questions into a SINGLE MySQL SELECT query.\n"
-    "- Output only SQL, no commentary.\n"
-    "- Use only tables/columns from the provided schema.\n"
-    "- Prefer safe queries. Do NOT modify data.\n"
-)
+LANG_INSTRUCTIONS: dict[str, str] = {
+    "en": (
+        "You convert English questions into a SINGLE MySQL SELECT query.\n"
+        "- Output only SQL, no commentary.\n"
+        "- Use only tables/columns from the provided schema.\n"
+        "- Do NOT modify data. SELECT only.\n"
+    ),
+    "hi": (
+        "The question below is written in Hindi. Understand it and convert it "
+        "into a SINGLE MySQL SELECT query.\n"
+        "- Output only SQL, no commentary.\n"
+        "- Use only tables/columns from the provided schema.\n"
+        "- Do NOT modify data. SELECT only.\n"
+    ),
+    "te": (
+        "The question below is written in Telugu. Understand it and convert it "
+        "into a SINGLE MySQL SELECT query.\n"
+        "- Output only SQL, no commentary.\n"
+        "- Use only tables/columns from the provided schema.\n"
+        "- Do NOT modify data. SELECT only.\n"
+    ),
+}
 
-def build_prompt(user_question: str, schema_text: str, examples_block: str | None = None) -> str:
+SUPPORTED_LANGUAGES: list[str] = list(LANG_INSTRUCTIONS.keys())
+
+
+def build_prompt(
+    user_question: str,
+    schema_text: str,
+    language: str = "en",
+    examples_block: str | None = None,
+) -> str:
     """
-    Compose a schema-aware prompt for the LLM.
-    schema_text: e.g. 'Tables: customers(customer_id, name,...); orders(order_id, ...)'
-    examples_block: optional few-shot examples to guide the model.
+    Compose a schema-aware, language-aware prompt for the LLM.
+
+    Args:
+        user_question: The user's natural language question.
+        schema_text:   Compact schema string, e.g. 'Tables: t(col1, col2); ...'
+        language:      ISO-like language code: 'en', 'hi', or 'te'.
+        examples_block: Optional few-shot examples to guide the model.
+
+    Raises:
+        ValueError: If the language is not supported.
     """
-    parts = [SYSTEM_INSTR, "Database schema (compact):", schema_text, ""]
+    if language not in LANG_INSTRUCTIONS:
+        raise ValueError(
+            f"Unsupported language: '{language}'. "
+            f"Supported: {SUPPORTED_LANGUAGES}"
+        )
+
+    system_instr = LANG_INSTRUCTIONS[language]
+
+    parts = [system_instr, "Database schema (compact):", schema_text, ""]
     if examples_block:
         parts += ["Examples:", examples_block, ""]
     parts += [f"Question: {user_question}", "SQL:"]

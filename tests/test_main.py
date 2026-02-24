@@ -43,7 +43,8 @@ def client(tmp_path):
 def test_health(client):
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+    assert response.json()["status"] == "ok"
+    assert "en" in response.json()["supported_languages"]
 
 def test_query_flow(client):
     # We need to mock generate_sql as well because it calls Ollama or LLM.
