@@ -88,4 +88,24 @@ Press Ctrl + C in each terminal to stop FastAPI, Streamlit, and Ollama.
 
 ---
 
+# 🛠️ How to Train the Model (Optional)
+
+If you want to fine-tune the model on the Indic sequences using LoRA, follow these steps:
+
+### 1️⃣ Generate the Training Dataset
+First, translate the Spider dataset into Hindi and Telugu:
+```bash
+python data/scripts/translate_data.py --split train
+```
+*This creates the `indic_spider_train.jsonl` dataset in `data/processed/`.*
+
+### 2️⃣ Run Fine-Tuning
+Run the training script (requires GPU):
+```bash
+python data/scripts/train.py
+```
+*This will apply 4-bit quantization, use LoRA adaptation on `mistralai/Mistral-7B-v0.1`, and save the output adapter to `models/mistral-indic-spider-lora`.*
+
+---
+
 That’s your final “run the project” section — short, ordered, and ready for your README or report.
