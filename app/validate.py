@@ -1,8 +1,11 @@
-# app/validate.py
-from typing import Tuple
 import re
+import logging
 import sqlglot
 from sqlglot.errors import ParseError
+from typing import Tuple
+from .config import settings
+
+logger = logging.getLogger(__name__)
 
 BLOCKED_KEYWORDS = {
     "DROP", "TRUNCATE", "ALTER", "RENAME",
@@ -34,6 +37,16 @@ def _contains_blocked(sql_upper: str) -> str | None:
     for fn in BLOCKED_FUNCTIONS:
         if re.search(rf"\b{fn}\s*\(", sql_upper):
             return f"Blocked function detected: {fn}"
+            
+    # Injection patterns
+    # 1. Comment injection
+    if "--" in sql_upper or "/*" in sql_upper:
+        return "Possible SQL injection detected (comment pattern)"
+        
+    # 2. Tautology injection (e.g. OR 1=1, OR 'a'='a')
+    if re.search(r"\bOR\b\s+(?:'[^']*'|[\d]+)\s*=\s*(?:'[^']*'|[\d]+)", sql_upper):
+        return "Possible SQL injection detected (tautology pattern)"
+        
     return None
 
 def validate_sql(
@@ -50,15 +63,22 @@ def validate_sql(
 
     # Clean + normalize
     sql = _strip_code_fences(sql)
+    sql_before_clean = sql
     sql = _ensure_semicolon(sql)
     sql_upper = sql.upper()
+    
+    def fmt_log(reason: str) -> str:
+        return f"Query Blocked | Reason: {reason} | SQL: {sql_before_clean.replace(chr(10), ' ')}"
 
     # Policy: SELECT-only for MVP
     if not _only_select(sql):
-        return False, "Only SELECT queries are allowed in this MVP.", sql
+        msg = "Only SELECT queries are allowed in this MVP."
+        logger.warning(fmt_log(msg))
+        return False, msg, sql
 
     blocked = _contains_blocked(sql_upper)
     if blocked:
+        logger.warning(fmt_log(blocked))
         return False, blocked, sql
 
     # Parse
@@ -112,6 +132,16 @@ def validate_sql(
     # JOIN sanity: require ON/USING to avoid cartesian blowups
     for j in ast.find_all(sqlglot.exp.Join):
         if not (j.args.get("on") or j.args.get("using")):
-            return False, "JOIN without ON/USING clause is not allowed.", sql
+            msg = "JOIN without ON/USING clause is not allowed."
+            logger.warning(fmt_log(msg))
+            return False, msg, sql
+
+    # Enforce LIMIT
+    limit = ast.args.get("limit")
+    if not limit:
+        # Append limit
+        limit_val = getattr(settings, "default_limit", 100)
+        ast = ast.limit(limit_val)
+        sql = ast.sql(dialect="mysql") + ";"
 
     return True, "ok", sql
