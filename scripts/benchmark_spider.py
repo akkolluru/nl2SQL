@@ -17,10 +17,20 @@ from app.database.sqlite_adapter import SQLiteAdapter
 from app.rag_builder import RAGSearcher
 
 def normalize_sql(sql: str) -> str:
+    """Normalize SQL for fair EM comparison: strip LIMIT, lowercase, re-parse."""
     try:
-        return sqlglot.parse_one(sql).sql()
+        parsed = sqlglot.parse_one(sql)
+        # Remove LIMIT clause (our pipeline auto-appends LIMIT)
+        if parsed.args.get("limit"):
+            parsed.args["limit"] = None
+        return parsed.sql().lower().strip().rstrip(";")
     except Exception:
-        return sql.strip()
+        # Fallback: manual normalization
+        s = sql.strip().rstrip(";").lower()
+        # Strip trailing LIMIT N
+        import re
+        s = re.sub(r"\s+limit\s+\d+\s*$", "", s)
+        return s
 
 async def evaluate_question(item: dict, lang: str, db_adapter: SQLiteAdapter, rag: RAGSearcher) -> dict:
     t0 = time.time()
