@@ -66,6 +66,13 @@ def validate_sql(
     sql_before_clean = sql
     sql = _ensure_semicolon(sql)
     sql_upper = sql.upper()
+
+    # Normalize allowed sets to lowercase for case-insensitive matching
+    allowed_tables_lower = [t.lower() for t in allowed_tables]
+    allowed_columns_lower: dict[str, set[str]] = {
+        t.lower(): {c.lower() for c in cols}
+        for t, cols in allowed_columns.items()
+    }
     
     def fmt_log(reason: str) -> str:
         return f"Query Blocked | Reason: {reason} | SQL: {sql_before_clean.replace(chr(10), ' ')}"
@@ -103,30 +110,30 @@ def validate_sql(
             table_to_alias[tname] = alias
             alias_to_table[alias] = tname
 
-    # Check that all referenced real tables exist
+    # Check that all referenced real tables exist (case-insensitive)
     for t in real_tables:
-        if t not in allowed_tables:
+        if t.lower() not in allowed_tables_lower:
             return False, f"Unknown table: {t}", sql
 
-    # Column checks (qualified + unqualified)
+    # Column checks (qualified + unqualified) — case-insensitive
     for col in ast.find_all(sqlglot.exp.Column):
         qualifier = col.table  # may be alias or real table or None
         cname = col.name
 
         if qualifier:
             # Resolve qualifier: it might be an alias; map back to real table
-            if qualifier in allowed_tables:
+            if qualifier.lower() in [t.lower() for t in allowed_tables]:
                 real = qualifier
             elif qualifier in alias_to_table:
                 real = alias_to_table[qualifier]
             else:
                 return False, f"Unknown table or alias: {qualifier}", sql
 
-            if cname not in allowed_columns.get(real, set()):
+            if cname.lower() not in allowed_columns_lower.get(real.lower(), set()):
                 return False, f"Unknown column: {qualifier}.{cname}", sql
         else:
             # Unqualified column: accept if it exists in ANY allowed table
-            if not any(cname in allowed_columns.get(t, set()) for t in allowed_tables):
+            if not any(cname.lower() in allowed_columns_lower.get(t.lower(), set()) for t in allowed_tables):
                 return False, f"Unknown column: {cname}", sql
 
     # JOIN sanity: require ON/USING to avoid cartesian blowups
