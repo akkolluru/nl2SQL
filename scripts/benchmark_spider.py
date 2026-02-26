@@ -14,6 +14,7 @@ from app.prompt import build_prompt, SUPPORTED_LANGUAGES
 from app.nl2sql import generate_sql
 from app.validate import validate_sql
 from app.database.sqlite_adapter import SQLiteAdapter
+from app.rag_builder import RAGSearcher
 
 def normalize_sql(sql: str) -> str:
     try:
@@ -21,7 +22,7 @@ def normalize_sql(sql: str) -> str:
     except Exception:
         return sql.strip()
 
-async def evaluate_question(item: dict, lang: str, db_adapter: SQLiteAdapter) -> dict:
+async def evaluate_question(item: dict, lang: str, db_adapter: SQLiteAdapter, rag: RAGSearcher) -> dict:
     t0 = time.time()
     db_id = item["db_id"]
     gold_sql = item["query"]
@@ -52,9 +53,13 @@ async def evaluate_question(item: dict, lang: str, db_adapter: SQLiteAdapter) ->
         return result
 
     try:
-        # Pipeline
         schema_text = db_adapter.get_schema_summary()
-        prompt = build_prompt(question, schema_text, language=lang)
+
+        # RAG: retrieve similar examples
+        examples = rag.search(question, k=3)
+        examples_block = rag.format_examples(examples)
+
+        prompt = build_prompt(question, schema_text, language=lang, examples_block=examples_block or None)
         predicted_sql = await generate_sql(prompt)
         
         allowed_tables, allowed_columns = db_adapter.get_allowed_sets()
@@ -93,8 +98,15 @@ async def evaluate_question(item: dict, lang: str, db_adapter: SQLiteAdapter) ->
 async def main():
     parser = argparse.ArgumentParser(description="Run Spider benchmark")
     parser.add_argument("--lang", type=str, choices=SUPPORTED_LANGUAGES, default="en", help="Language to test")
+    parser.add_argument("--limit", type=int, default=0, help="Limit to N questions (0 = all)")
     parser.add_argument("--dry-run", action="store_true", help="Run only the first 10 questions")
     args = parser.parse_args()
+
+    # Initialize RAG
+    print("Initializing RAG (ChromaDB)...")
+    rag = RAGSearcher()
+    rag.index_spider()
+    print(f"RAG ready — {rag._collection.count()} examples indexed.")
 
     # Determine input file
     if args.lang == "en":
@@ -119,6 +131,9 @@ async def main():
     if args.dry_run:
         print("Dry run enabled. Limiting to 10 questions.")
         items = items[:10]
+    elif args.limit > 0:
+        print(f"Limiting to {args.limit} questions.")
+        items = items[:args.limit]
 
     results = []
     
@@ -133,7 +148,7 @@ async def main():
             
         adapter = SQLiteAdapter(db_path)
         try:
-            res = await evaluate_question(item, args.lang, adapter)
+            res = await evaluate_question(item, args.lang, adapter, rag)
             results.append(res)
         finally:
             adapter.close()
