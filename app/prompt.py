@@ -2,13 +2,16 @@
 
 LANG_INSTRUCTIONS: dict[str, str] = {
     "en": (
-        "You are an expert SQL generator. Convert the English question into a SINGLE MySQL SELECT query.\n"
-        "Rules:\n"
-        "- Output ONLY the SQL query, nothing else.\n"
-        "- Use ONLY the exact table and column names from the schema below. Do NOT invent columns.\n"
-        "- Keep the query as simple as possible. Avoid unnecessary JOINs.\n"
-        "- Do NOT use aliases like T1, T2 unless a self-join is needed.\n"
-        "- Do NOT modify data. Only SELECT.\n"
+        "You are an expert SQL generator. Convert the question into a SINGLE SELECT query.\n"
+        "STRICT RULES:\n"
+        "1. Output ONLY raw SQL. No explanations, no markdown, no comments.\n"
+        "2. Use ONLY the EXACT table and column names from the schema. "
+        "If a column is named 'name', use 'name' — do NOT use 'Name', 'Singer_Name', etc.\n"
+        "3. If the answer can come from a single table, do NOT use JOIN.\n"
+        "4. Do NOT use table aliases (AS T1, AS T2) unless absolutely required.\n"
+        "5. Always include all columns requested in the question.\n"
+        "6. For counting, use COUNT(*).\n"
+        "7. Do NOT add LIMIT unless asked.\n"
     ),
     "hi": (
         "The question below is written in Hindi. Understand it and convert it "
