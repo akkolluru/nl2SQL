@@ -7,8 +7,22 @@
 # 3. Upload "spider_train_full.jsonl" from training/ folder
 # 4. Paste this entire file into a single cell and run it
 # 5. Leave it running overnight (~3-4 hours for 7000 examples)
-# 6. Download the GGUF file at the end to use with Ollama
+# 6. The GGUF file will be auto-saved to Google Drive!
 # ---------------------------------------------------------
+
+# ==========================================
+# STEP 0: Mount Google Drive (auto-save backup)
+# ==========================================
+try:
+    from google.colab import drive
+    drive.mount('/content/drive')
+    DRIVE_DIR = '/content/drive/MyDrive/nl2sql_model'
+    import os
+    os.makedirs(DRIVE_DIR, exist_ok=True)
+    print(f"✅ Google Drive mounted. Model will be saved to: {DRIVE_DIR}")
+except Exception:
+    DRIVE_DIR = None
+    print("⚠️ Google Drive not available (Kaggle?). Will save locally only.")
 
 # ==========================================
 # STEP 1: Install Dependencies (~2 min)
@@ -133,17 +147,35 @@ model.save_pretrained_gguf(
     quantization_method="q4_k_m"
 )
 
-print("""
+# Copy GGUF to Google Drive so it survives disconnection
+import glob, shutil
+gguf_files = glob.glob("nl2sql_finetuned*/**/*.gguf", recursive=True)
+if not gguf_files:
+    gguf_files = glob.glob("nl2sql_finetuned*/*.gguf")
+
+gguf_path = gguf_files[0] if gguf_files else "NOT_FOUND"
+print(f"GGUF file location: {gguf_path}")
+
+if DRIVE_DIR and os.path.exists(gguf_path):
+    dest = os.path.join(DRIVE_DIR, os.path.basename(gguf_path))
+    shutil.copy2(gguf_path, dest)
+    print(f"✅ GGUF copied to Google Drive: {dest}")
+    # Also copy the Modelfile
+    modelfile_path = os.path.join(os.path.dirname(gguf_path), "Modelfile")
+    if os.path.exists(modelfile_path):
+        shutil.copy2(modelfile_path, os.path.join(DRIVE_DIR, "Modelfile"))
+
+print(f"""
 ============================================
 ✅ DONE! NEXT STEPS:
 ============================================
-1. Download "nl2sql_finetuned-unsloth.Q4_K_M.gguf" from Colab files
-2. On your Mac, create a Modelfile:
-   echo 'FROM ./nl2sql_finetuned-unsloth.Q4_K_M.gguf' > Modelfile
-3. Import into Ollama:
+1. GGUF file is at: {gguf_path}
+   (Also saved to Google Drive if mounted)
+2. Download the .gguf file to your Mac
+3. On your Mac, create a Modelfile:
+   echo 'FROM ./{os.path.basename(gguf_path)}' > Modelfile
+4. Import into Ollama:
    ollama create nl2sql-finetuned -f Modelfile
-4. Test it:
-   ollama run nl2sql-finetuned "SELECT * FROM users"
 5. Update your .env:
    OLLAMA_MODEL=nl2sql-finetuned
 6. Re-run the benchmark:
