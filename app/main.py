@@ -1,4 +1,11 @@
 # app/main.py
+"""
+FastAPI backend — orchestrates the full NL→SQL pipeline.
+
+Pipeline: Schema Introspection → Schema Linking → RAG → Prompt → LLM
+          → Self-Correction (validate + retry) → Execute → Return
+"""
+
 import logging
 
 from fastapi import FastAPI, HTTPException, Depends
@@ -9,13 +16,15 @@ from .validate import validate_sql
 from .database.factory import get_adapter
 from .database.base import BaseAdapter
 from .rag_builder import RAGSearcher
+from .schema_linker import link_schema
+from .self_correct import generate_sql_with_retry
 
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="NL2SQL — Multilingual",
     description="Natural Language to SQL API supporting English, Hindi, and Telugu.",
-    version="0.3.0",
+    version="0.4.0",
 )
 
 # ---------------------------------------------------------------------------
@@ -85,18 +94,21 @@ def health():
 
 @app.post("/query", response_model=QueryOut)
 async def query(q: QueryIn, db: BaseAdapter = Depends(get_db)):
-    # 1) Schema introspection
+    # 1) Schema introspection (with types + foreign keys)
     try:
-        schema_text = db.get_schema_summary()
+        full_schema = db.get_schema_summary()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
-    # 2) RAG — retrieve similar NL-SQL examples
+    # 2) Schema Linking — pre-filter to relevant tables/columns
+    schema_text = await link_schema(q.question, full_schema)
+
+    # 3) RAG — retrieve similar NL-SQL examples
     examples = rag.search(q.question, k=3)
     examples_block = rag.format_examples(examples)
     logger.info("RAG returned %d examples for query.", len(examples))
 
-    # 3) Build language-aware prompt (with RAG examples injected)
+    # 4) Build language-aware prompt (with RAG examples injected)
     try:
         prompt = build_prompt(
             q.question, schema_text,
@@ -106,20 +118,16 @@ async def query(q: QueryIn, db: BaseAdapter = Depends(get_db)):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    # 4) LLM → SQL
-    sql = await generate_sql(prompt)
-
-    # 5) Safety validation
+    # 5) LLM → SQL with self-correction (retry up to 3x on error)
     try:
-        allowed_tables, allowed_columns = db.get_allowed_sets()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Schema fetch error: {str(e)}")
-
-    ok, msg, cleaned = validate_sql(sql, list(allowed_tables), allowed_columns)
-    if not ok:
+        cleaned, attempts = await generate_sql_with_retry(
+            prompt, db, max_retries=3
+        )
+        logger.info("SQL generated in %d attempt(s).", attempts)
+    except RuntimeError as e:
         raise HTTPException(
             status_code=422,
-            detail={"error": msg, "sql": cleaned, "language": q.language},
+            detail={"error": str(e), "language": q.language},
         )
 
     # 6) Execute (read-only)
