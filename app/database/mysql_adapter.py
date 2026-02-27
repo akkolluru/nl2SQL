@@ -1,9 +1,18 @@
+# app/database/mysql_adapter.py
+"""
+MySQL database adapter — used for live database queries.
+
+Reads schema via INFORMATION_SCHEMA and executes read-only SQL.
+"""
 
 import mysql.connector
-from typing import List, Tuple, Dict, Set, Any
+from typing import Any, Dict, List, Set, Tuple
+
 from .base import BaseAdapter
 
+
 class MySQLAdapter(BaseAdapter):
+    """Database adapter for MySQL/MariaDB connections."""
     def __init__(self, host, user, password, db_name):
         self.config = {
             "host": host,
@@ -45,10 +54,7 @@ class MySQLAdapter(BaseAdapter):
             return "Tables: " + "; ".join(parts)
         finally:
             cur.close()
-            # We can keep connection open or close it. 
-            # For now, let's keep it open or manage it in upper layers. 
-            # Re-implementation of original logic closed it every time.
-            self.close() 
+            self.close()
 
     def get_allowed_sets(self) -> Tuple[Set[str], Dict[str, Set[str]]]:
         self.connect()

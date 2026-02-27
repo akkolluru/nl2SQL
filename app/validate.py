@@ -1,8 +1,18 @@
-import re
+# app/validate.py
+"""
+SQL Safety Validation Engine.
+
+Validates LLM-generated SQL using AST parsing (sqlglot), injection
+detection, blocked keyword filtering, and schema-aware table/column checks.
+"""
+
 import logging
+import re
+from typing import Tuple
+
 import sqlglot
 from sqlglot.errors import ParseError
-from typing import Tuple
+
 from .config import settings
 
 logger = logging.getLogger(__name__)
