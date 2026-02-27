@@ -11,7 +11,11 @@ import re
 from typing import Tuple
 
 import sqlglot
-from sqlglot.errors import ParseError
+try:
+    from sqlglot.errors import ParseError
+except ImportError:
+    # Older sqlglot versions don't expose ParseError separately
+    ParseError = Exception  # type: ignore[misc, assignment]
 
 from .config import settings
 
@@ -125,10 +129,21 @@ def validate_sql(
         if t.lower() not in allowed_tables_lower:
             return False, f"Unknown table: {t}", sql
 
+    # Collect SELECT aliases (e.g., COUNT(x) AS total_orders)
+    # These are valid column references in ORDER BY, GROUP BY, HAVING
+    select_aliases: set[str] = set()
+    for expr in ast.find_all(sqlglot.exp.Alias):
+        if expr.alias:
+            select_aliases.add(expr.alias.lower())
+
     # Column checks (qualified + unqualified) — case-insensitive
     for col in ast.find_all(sqlglot.exp.Column):
         qualifier = col.table  # may be alias or real table or None
         cname = col.name
+
+        # Skip if this column name is a SELECT alias (e.g., ORDER BY total_orders)
+        if not qualifier and cname.lower() in select_aliases:
+            continue
 
         if qualifier:
             # Resolve qualifier: it might be an alias; map back to real table
