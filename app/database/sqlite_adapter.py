@@ -26,19 +26,33 @@ class SQLiteAdapter(BaseAdapter):
             cursor = self.conn.cursor()
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
             tables = [r[0] for r in cursor.fetchall()]
-            
+
             parts = []
             for t in tables:
-                # Retrieve column info for each table
                 cursor.execute(f"PRAGMA table_info({t})")
                 # rows: (cid, name, type, notnull, dflt_value, pk)
-                cols = [r[1] for r in cursor.fetchall()]
-                parts.append(f"{t}(" + ", ".join(cols) + ")")
-            
-            return "Tables: " + "; ".join(parts)
+                cols = []
+                for r in cursor.fetchall():
+                    col_str = f"{r[1]} {r[2]}" if r[2] else r[1]
+                    if r[5]:  # pk flag
+                        col_str += " PK"
+                    cols.append(col_str)
+                parts.append(f"{t}({', '.join(cols)})")
+
+            # Add foreign key info
+            fk_parts = []
+            for t in tables:
+                cursor.execute(f"PRAGMA foreign_key_list({t})")
+                for fk in cursor.fetchall():
+                    # fk: (id, seq, table, from, to, on_update, on_delete, match)
+                    fk_parts.append(f"{t}.{fk[3]} → {fk[2]}.{fk[4]}")
+
+            schema = "Tables: " + "; ".join(parts)
+            if fk_parts:
+                schema += "\nForeign Keys: " + "; ".join(fk_parts)
+            return schema
         finally:
-            # Keep open or close? adhering to previous pattern
-            pass 
+            pass
 
     def get_allowed_sets(self) -> Tuple[Set[str], Dict[str, Set[str]]]:
         self.connect()
