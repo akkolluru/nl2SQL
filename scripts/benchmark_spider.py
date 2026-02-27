@@ -15,6 +15,7 @@ from app.nl2sql import generate_sql
 from app.validate import validate_sql
 from app.database.sqlite_adapter import SQLiteAdapter
 from app.rag_builder import RAGSearcher
+from app.self_correct import generate_sql_with_retry
 
 def normalize_sql(sql: str) -> str:
     """Normalize SQL for fair EM comparison: strip LIMIT, lowercase, re-parse."""
@@ -55,6 +56,7 @@ async def evaluate_question(item: dict, lang: str, db_adapter: SQLiteAdapter, ra
         "error": None,
         "ex_match": 0,
         "em_match": 0,
+        "attempts": 0,
         "latency_sec": 0.0
     }
 
@@ -70,17 +72,17 @@ async def evaluate_question(item: dict, lang: str, db_adapter: SQLiteAdapter, ra
         examples_block = rag.format_examples(examples)
 
         prompt = build_prompt(question, schema_text, language=lang, examples_block=examples_block or None)
-        predicted_sql = await generate_sql(prompt)
-        
-        allowed_tables, allowed_columns = db_adapter.get_allowed_sets()
-        ok, msg, cleaned_sql = validate_sql(predicted_sql, list(allowed_tables), allowed_columns)
-        
-        if not ok:
+
+        # Self-correction: retry up to 3 times on error
+        try:
+            cleaned_sql, attempts = await generate_sql_with_retry(
+                prompt, db_adapter, max_retries=3
+            )
             result["predicted_sql"] = cleaned_sql
-            result["error"] = f"Validation failed: {msg}"
+            result["attempts"] = attempts
+        except RuntimeError as e:
+            result["error"] = str(e)
             return result
-            
-        result["predicted_sql"] = cleaned_sql
 
         # Calculate EX (Execution Match)
         try:
