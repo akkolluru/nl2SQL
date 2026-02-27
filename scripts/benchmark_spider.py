@@ -16,6 +16,7 @@ from app.validate import validate_sql
 from app.database.sqlite_adapter import SQLiteAdapter
 from app.rag_builder import RAGSearcher
 from app.self_correct import generate_sql_with_retry
+from app.schema_linker import link_schema
 
 def normalize_sql(sql: str) -> str:
     """Normalize SQL for fair EM comparison: strip LIMIT, lowercase, re-parse."""
@@ -65,7 +66,10 @@ async def evaluate_question(item: dict, lang: str, db_adapter: SQLiteAdapter, ra
         return result
 
     try:
-        schema_text = db_adapter.get_schema_summary()
+        full_schema = db_adapter.get_schema_summary()
+
+        # Schema Linking: pre-filter to relevant tables/columns
+        schema_text = await link_schema(question, full_schema)
 
         # RAG: retrieve similar examples
         examples = rag.search(question, k=3)
